@@ -12,6 +12,9 @@ app.use(bodyParser.json());
 app.route('/')
   .get(gameController.generateRooms);
 
+app.route('/games-result')
+  .get(gameController.getGamesResult);
+
 app.route('/make-movement')
   .post(actionsController.moveHunter);
 

@@ -1,12 +1,18 @@
+const AWS = require('aws-sdk');
+const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-central-1' });
+const { v4: uuidv4 } = require('uuid');
 const Game = require('./model/gameModel.js')
 const Room = require('./model/roomModel.js')
 const Hunter = require('./model/hunterModel.js')
 const actionsController = require('./actionsController');
+const { Perception: Perception } = require('./constants/defines.js')
 
 module.exports.generateRooms = async (req, res) => {
   let game = new Game();
   game.rooms = [[], [], [], []];
   game.hunter = new Hunter();
+  game.id = uuidv4();
+  game.created = new Date().getTime();
 
   for (let i = 0; i < 4; i++) {
     let roomsArray = new Array(new Room(), new Room(), new Room(), new Room());
@@ -20,7 +26,23 @@ module.exports.generateRooms = async (req, res) => {
     generatePit(game.rooms);
   }
   actionsController.checkPerception(game);
-  res.status(200).send(game);
+  /* I left then and catch empty because I don't find it relevant for the user to play, but at the same time
+    I want to let you know that I know how to handle the promise error
+  */
+  persistGameResult(game).then(() => {
+  }).catch((err) => {
+    console.error(err);
+  }).finally(() => {
+    res.status(200).send(game);
+  });
+}
+
+module.exports.getGamesResult = async (req, res) => {
+  getGamesResultDDBB().then((data) => {
+    res.status(200).send(data);
+  }).catch((err) => {
+    res.status(500).send(err);
+  });
 }
 
 function generateWumpus(rooms) {
@@ -32,7 +54,7 @@ function generateWumpus(rooms) {
   } while (rooms[positionX][positionY].exit)
 
   rooms[positionX][positionY].wumpus = true;
-  generatePerception(rooms, positionX, positionY, 'smell');
+  generatePerception(rooms, positionX, positionY, Perception.smell);
 }
 
 function generateGold(rooms) {
@@ -44,7 +66,7 @@ function generateGold(rooms) {
   } while (rooms[positionX][positionY].exit || rooms[positionX][positionY].wumpus)
 
   rooms[positionX][positionY].gold = true;
-  generatePerception(rooms, positionX, positionY, 'shine');
+  generatePerception(rooms, positionX, positionY, Perception.shine);
 }
 
 function generatePit(rooms) {
@@ -56,7 +78,7 @@ function generatePit(rooms) {
   } while (rooms[positionX][positionY].exit || rooms[positionX][positionY].wumpus || rooms[positionX][positionY].gold)
 
   rooms[positionX][positionY].pit = true;
-  generatePerception(rooms, positionX, positionY, 'breeze');
+  generatePerception(rooms, positionX, positionY, Perception.breeze);
 }
 
 function generatePosition() {
@@ -77,3 +99,26 @@ function generatePerception(rooms, x, y, perception) {
     rooms[x][y+1][perception] = true;
   }
 }
+
+function persistGameResult(game) {
+  const params = {
+    TableName: 'games',
+    Item: {
+      id: game.id,
+      result: game.result,
+      created: game.created,
+      lastActivity: new Date().getTime(),
+      ended: game.result != '' ? true : false
+    }
+  }
+  return dynamodb.put(params).promise();
+}
+
+function getGamesResultDDBB() {
+  const params = {
+    TableName: 'games'
+  }
+  return dynamodb.scan(params).promise();
+}
+
+module.exports.persistGameResult = persistGameResult;

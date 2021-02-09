@@ -1,81 +1,62 @@
-const Game = require('./model/gameModel.js')
-const Hunter = require('./model/hunterModel.js')
+const { Direction: Direction, Span: Span, GameResult: GameResult } = require('./constants/defines.js')
+const gameController = require('./gameController');
 
 module.exports.moveHunter = async (req, res) => {
-  let game = new Game();
-  game = req.body;
+  let game = req.body;
 
   switch (game.hunter.orientation) {
-    case 'right':
-      if (game.hunter.positionY === game.rooms[0].length - 1) {
-        game.message = `<span class='wall-text'>Hay un muro</span><br>`;
-      } else {
+    case Direction.right:
+      if (!isWall(Direction.right, game)) {
         game.hunter.positionY = game.hunter.positionY + 1;
         checkPerception(game);
       }
       break;
-    case 'bottom':
-      if (game.hunter.positionX === game.rooms.length - 1) {
-        game.message = `<span class='wall-text'>Hay un muro</span><br>`;
-      } else {
+    case Direction.bottom:
+      if (!isWall(Direction.bottom, game)) {
         game.hunter.positionX = game.hunter.positionX + 1;
         checkPerception(game);
       }
       break;
-    case 'left':
-      if (game.hunter.positionY === 0) {
-        game.message = `<span class='wall-text'>Hay un muro</span><br>`;
-      } else {
+    case Direction.left:
+      if (!isWall(Direction.left, game)) {
         game.hunter.positionY = game.hunter.positionY - 1;
         checkPerception(game);
       }
       break;
-    case 'top':
-      if (game.hunter.positionX === 0) {
-        game.message = `<span class='wall-text'>Hay un muro</span><br>`;
-      } else {
+    case Direction.top:
+      if (!isWall(Direction.top, game)) {
         game.hunter.positionX = game.hunter.positionX - 1;
         checkPerception(game);
       }
       break;
   }
-
-  res.status(200).send({ hunter: game.hunter, message: game.message, victory: game.victory, loss: game.loss });
+  /* I left then and catch empty because I don't find it relevant for the user to play, but at the same time
+    I want to let you know that I know how to handle the promise error
+  */
+  gameController.persistGameResult(game).then(() => {
+  }).catch((err)=> {
+    console.warn('Error');
+  }).finally((data) => {
+    res.status(200).send({ hunter: game.hunter, message: game.message, victory: game.victory, loss: game.loss });
+  })
 }
 
 module.exports.turnAround = async (req, res) => {
-  let hunter = new Hunter();
-  hunter = req.body.hunter;
+  let hunter = req.body.hunter;
   let direction = req.body.direction;
 
   switch (hunter.orientation) {
-    case 'right':
-      if (direction == 'right') {
-        hunter.orientation = 'bottom';
-      } else if (direction == 'left') {
-        hunter.orientation = 'top';
-      }
+    case Direction.right:
+      hunter.orientation = direction == Direction.right ? Direction.bottom : Direction.top;
       break;
-    case 'bottom':
-      if (direction == 'right') {
-        hunter.orientation = 'left';
-      } else if (direction == 'left') {
-        hunter.orientation = 'right';
-      }
+    case Direction.bottom:
+      hunter.orientation = direction == Direction.right ? Direction.left : Direction.right;
       break;
-    case 'left':
-      if (direction == 'right') {
-        hunter.orientation = 'top';
-      } else if (direction == 'left') {
-        hunter.orientation = 'bottom';
-      }
+    case Direction.left:
+      hunter.orientation = direction == Direction.right ? Direction.top : Direction.bottom;
       break;
-    case 'top':
-      if (direction == 'right') {
-        hunter.orientation = 'right';
-      } else if (direction == 'left') {
-        hunter.orientation = 'left';
-      }
+    case Direction.top:
+      hunter.orientation = direction == Direction.right ? Direction.right : Direction.left;
       break;
   }
 
@@ -87,27 +68,45 @@ function checkPerception(game) {
   let x = game.hunter.positionX;
   game.message = '';
   if (game.rooms[x][y].pit) {
-    game.message = `<span class='death-text'><b>Has caido en un pozo y has muerto</b></span><br>`;
+    game.message = Span.pit;
     game.loss = true;
+    game.result = GameResult.pit;
   } else if (game.rooms[x][y].wumpus) {
-    game.message = `<span class='death-text'><b>Has sido comido por wumpus y has muerto</b></span><br>`
+    game.message = Span.wumpus;
     game.loss = true;
+    game.result = GameResult.wumpus;
   } else if (game.rooms[x][y].gold) {
-    game.message = `<span class='victory-text'><b>Has conseguido el oro, vuelve a la casilla de salida</b></span><br>`
+    game.message = Span.gold;
     game.hunter.hasGold = true;
   } else if (game.rooms[x][y].exit && game.hunter.hasGold) {
-    game.message = `<span class='victory-text'><b>¡Enhorabuena, has ganado!</b></span><br>`
+    game.message = Span.victory;
     game.victory = true;
+    game.result = GameResult.victory;
   } else {
     if (game.rooms[x][y].breeze) {
-      game.message = `<span class='perception-text'>Se percibe una brisa</span><br>`
+      game.message = Span.breezePerception;
     }
     if (game.rooms[x][y].smell) {
-      game.message = `${game.message}<span class='perception-text'>Se percibe un hedor</span><br>`
+      game.message += Span.smellPerception;
     }
     if (game.rooms[x][y].shine) {
-      game.message = `${game.message}<span class='perception-text'>Se percibe un brillo</span><br>`
+      game.message += Span.shinePerception;
     }
+  }
+}
+
+function isWall(direction, game) {
+  const leftWall = 0;
+  const topWall = 0;
+  const rightWall = game.rooms[0].length - 1;
+  const bottomWall = game.rooms.length - 1;
+  if ((direction === Direction.right && game.hunter.positionY === rightWall)
+    || (direction === Direction.bottom && game.hunter.positionX === bottomWall)
+    || (direction === Direction.left && game.hunter.positionY === leftWall)
+    || (direction === Direction.top && game.hunter.positionX === topWall)) {
+    game.message = Span.wall;
+
+    return true;
   }
 }
 
