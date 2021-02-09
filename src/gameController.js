@@ -1,9 +1,9 @@
 const AWS = require('aws-sdk');
 const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'eu-central-1' });
 const { v4: uuidv4 } = require('uuid');
-const Game = require('./model/gameModel.js')
-const Room = require('./model/roomModel.js')
-const Hunter = require('./model/hunterModel.js')
+const Game = require('./model/game.js')
+const Room = require('./model/room.js')
+const Hunter = require('./model/hunter.js')
 const actionsController = require('./actionsController');
 const { Perception: Perception } = require('./constants/defines.js')
 
